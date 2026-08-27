@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: argus-webapi
+  # O .env e lido pelo Spring como properties, a partir do diretorio de trabalho.
+  # Nao confundir com o env_file: do Docker, que injeta variavel de ambiente:
+  # aqui o arquivo precisa existir no disco.
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USER}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      # Derruba a subida se entidade e schema divergirem. Schema so muda por migration.
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    # Sem default de proposito: placeholder vazio derruba a subida. Um hash
+    # padrao versionado seria senha publica na VM.
+    placeholders:
+      admin-email: ${ADMIN_EMAIL}
+      admin-password-hash: ${ADMIN_PASSWORD_HASH}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+argus:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  jwt:
+    issuer: argus-webapi
+    access-ttl: 15m
+    refresh-ttl: 7d
+    private-key: ${JWT_PRIVATE_KEY:}
+    public-key: ${JWT_PUBLIC_KEY:}
+  stream:
+    heartbeat: 30s
+    timeout: 1h
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
