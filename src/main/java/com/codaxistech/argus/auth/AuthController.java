@@ -20,13 +20,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Exchange email and password for a token pair")
+    @Operation(operationId = "login", summary = "Exchange email and password for a token pair")
     public AuthDtos.TokenResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
         return service.login(request);
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Exchange a valid refresh token for a new pair")
+    @Operation(operationId = "refreshToken", summary = "Exchange a valid refresh token for a new pair")
     public AuthDtos.TokenResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
         return service.refresh(request);
     }

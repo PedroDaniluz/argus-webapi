@@ -29,14 +29,14 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List accounts")
+    @Operation(operationId = "listUsers", summary = "List accounts")
     public List<UserDtos.Response> list() {
         return service.list();
     }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create an account", description = "There is no self sign-up.")
+    @Operation(operationId = "createUser", summary = "Create an account", description = "There is no self sign-up.")
     public ResponseEntity<UserDtos.Response> create(@Valid @RequestBody UserDtos.CreateRequest request) {
         UserDtos.Response created = service.create(request);
         return ResponseEntity.created(URI.create("/api/users/" + created.id())).body(created);

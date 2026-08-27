@@ -33,13 +33,13 @@ public class DeviceController {
     }
 
     @GetMapping
-    @Operation(summary = "List devices")
+    @Operation(operationId = "listDevices", summary = "List devices")
     public List<DeviceDtos.Response> list() {
         return service.list();
     }
 
     @GetMapping("/{code}")
-    @Operation(summary = "Device detail with its last known position")
+    @Operation(operationId = "getDevice", summary = "Device detail with its last known position")
     public DeviceDtos.Detail detail(@PathVariable String code) {
         DeviceDtos.Response device = service.get(code);
         return new DeviceDtos.Detail(device,
@@ -48,7 +48,7 @@ public class DeviceController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Register a device",
+    @Operation(operationId = "createDevice", summary = "Register a device",
             description = "The key comes back in plaintext here and in no other response.")
     public ResponseEntity<DeviceDtos.Created> create(
             @Valid @RequestBody DeviceDtos.CreateRequest request) {
@@ -60,7 +60,7 @@ public class DeviceController {
 
     @DeleteMapping("/{code}/key")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Revoke the device key",
+    @Operation(operationId = "revokeDeviceKey", summary = "Revoke the device key",
             description = "Takes effect immediately: the next ingest POST is refused.")
     public DeviceDtos.Response revokeKey(@PathVariable String code) {
         return service.revokeKey(code);

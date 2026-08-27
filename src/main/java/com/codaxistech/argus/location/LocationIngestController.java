@@ -29,7 +29,7 @@ public class LocationIngestController {
 
     /** 202, not 201: the board does not wait for consistency nor read the resource back. */
     @PostMapping("/locations")
-    @Operation(summary = "Accept a batch of up to 50 samples",
+    @Operation(operationId = "ingestLocations", summary = "Accept a batch of up to 50 samples",
             description = "Idempotent per (device, ts): resending the same buffer stores nothing twice.")
     public ResponseEntity<LocationDtos.IngestResponse> ingest(
             @AuthenticationPrincipal DeviceDtos.Authenticated device,

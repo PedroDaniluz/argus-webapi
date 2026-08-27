@@ -43,7 +43,7 @@ public class LocationStreamController {
     }
 
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "Position stream (SSE)",
+    @Operation(operationId = "streamLocations", summary = "Position stream (SSE)",
             description = "Emits one 'location' event per stored sample and a :heartbeat comment "
                     + "every 30s. The token goes in the Authorization header, so use a client "
                     + "that can set headers (fetch, or an EventSource polyfill).")
