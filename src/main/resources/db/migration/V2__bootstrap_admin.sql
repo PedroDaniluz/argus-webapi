@@ -1,12 +1,7 @@
--- Primeira conta. Sem ela nao ha como chamar POST /api/users, que exige ADMIN:
--- alguem tem que existir antes do primeiro login.
---
--- Email e hash saem de placeholder do Flyway, com default para localhost. Para
--- usar outra credencial, defina ADMIN_EMAIL e ADMIN_PASSWORD_HASH no .env antes
--- da primeira subida.
---
--- ON CONFLICT DO NOTHING: rodou uma vez, nunca mais mexe. Trocar a senha depois
--- e UPDATE no banco, nao alteracao desta migration.
+-- The first account: POST /api/users requires ADMIN, so one has to exist already.
+-- Values come from ADMIN_EMAIL and ADMIN_PASSWORD_HASH, with no default, so an
+-- unset placeholder fails startup instead of shipping a known password.
+-- Runs once; changing the password later is an UPDATE, not an edit to this file.
 INSERT INTO app_user (id, email, password_hash, name, role)
 VALUES ('00000000-0000-0000-0000-000000000001',
         '${admin_email}',

@@ -23,15 +23,13 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Tempo real por SSE. O fluxo e so servidor para navegador, e o EventSource
- * reconecta sozinho — WebSocket seria bidirecional para um problema que nao e.
- *
- * <p>O navegador abre este stream direto na API, sem atravessar o Next, entao o
- * CORS precisa liberar a origem do painel.
+ * SSE, not WebSocket: the flow is server to browser only and EventSource reconnects
+ * on its own. The browser opens it directly against this API, so CORS has to allow
+ * the dashboard origin.
  */
 @RestController
 @RequestMapping("/api/locations")
-@Tag(name = "locations", description = "Consulta de posicoes")
+@Tag(name = "locations", description = "Position queries")
 @SecurityRequirement(name = "bearerAuth")
 public class LocationStreamController {
 
@@ -41,17 +39,16 @@ public class LocationStreamController {
     private final long timeoutMillis;
 
     LocationStreamController(@Value("${argus.stream.timeout}") Duration timeout) {
-        // 0 desliga o timeout do lado do servidor; o heartbeat cuida do resto.
         this.timeoutMillis = timeout.isZero() ? 0L : timeout.toMillis();
     }
 
     @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "Stream de posicoes (SSE)",
-            description = "Emite um evento 'location' por amostra gravada e um comentario "
-                    + ":heartbeat a cada 30s. O token vai no header Authorization, entao "
-                    + "use um cliente que permita header (fetch/EventSource polyfill).")
+    @Operation(summary = "Position stream (SSE)",
+            description = "Emits one 'location' event per stored sample and a :heartbeat comment "
+                    + "every 30s. The token goes in the Authorization header, so use a client "
+                    + "that can set headers (fetch, or an EventSource polyfill).")
     public SseEmitter stream(
-            @Parameter(description = "filtra por code de dispositivo; ausente, manda todos")
+            @Parameter(description = "filter by device code; omit for every device")
             @RequestParam(name = "device", required = false) String device) {
 
         SseEmitter emitter = new SseEmitter(timeoutMillis);
@@ -66,9 +63,8 @@ public class LocationStreamController {
         emitter.onError(e -> subscriptions.remove(subscription));
 
         try {
-            // Primeiro byte imediato: firma a conexao antes de qualquer proxy no
-            // caminho decidir que ela esta ociosa.
-            emitter.send(SseEmitter.event().comment("conectado"));
+            // Immediate first byte, so no proxy decides the connection is idle.
+            emitter.send(SseEmitter.event().comment("connected"));
         } catch (IOException e) {
             subscriptions.remove(subscription);
             emitter.completeWithError(e);
@@ -76,10 +72,7 @@ public class LocationStreamController {
         return emitter;
     }
 
-    /**
-     * Depois do commit, nunca durante: empurrar antes de a transacao fechar
-     * mandaria para o painel uma posicao que um rollback ainda pode apagar.
-     */
+    /** After commit, never during: a rollback could still erase what was pushed. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     void onStored(LocationDtos.Stored event) {
         for (LocationDtos.Response location : event.locations()) {
@@ -94,16 +87,9 @@ public class LocationStreamController {
         }
     }
 
-    /**
-     * Comentario SSE a cada 30s. O Traefik ja esta com idleTimeout=0, mas o
-     * heartbeat continua valendo: e o que faz o cliente perceber que a conexao
-     * caiu, em vez de ficar esperando um evento que nunca vem.
-     */
+    /** How a client notices a dropped connection instead of waiting forever. */
     @Scheduled(fixedDelayString = "${argus.stream.heartbeat}")
     void heartbeat() {
-        if (subscriptions.isEmpty()) {
-            return;
-        }
         for (Subscription subscription : subscriptions) {
             send(subscription, SseEmitter.event().comment("heartbeat"));
         }
@@ -113,14 +99,13 @@ public class LocationStreamController {
         try {
             subscription.emitter().send(event);
         } catch (IOException | IllegalStateException e) {
-            // Cliente sumiu. Nao e erro: o EventSource reconecta e abre outra.
-            log.debug("assinante do stream removido: {}", e.toString());
+            // Client is gone. EventSource will reconnect.
+            log.debug("dropping stream subscriber: {}", e.toString());
             subscriptions.remove(subscription);
             subscription.emitter().complete();
         }
     }
 
-    /** {@code deviceCode} nulo significa "todos os dispositivos". */
     private record Subscription(SseEmitter emitter, String deviceCode) {
 
         boolean accepts(LocationDtos.Response location) {

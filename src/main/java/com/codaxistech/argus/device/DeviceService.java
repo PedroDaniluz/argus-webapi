@@ -19,9 +19,8 @@ import java.util.Optional;
 public class DeviceService {
 
     /**
-     * A chave apresentada e {@code <code>.<secret>}. O prefixo nao e segredo: ele
-     * so serve para achar a linha em uma consulta indexada. Sem ele o filtro teria
-     * que rodar BCrypt contra todo dispositivo cadastrado a cada request.
+     * The presented key is {@code <code>.<secret>}. The prefix is not a secret; it just
+     * makes the lookup indexed, instead of BCrypt against every device on every request.
      */
     static final char KEY_SEPARATOR = '.';
     private static final int SECRET_BYTES = 32;
@@ -48,7 +47,7 @@ public class DeviceService {
     @Transactional
     public DeviceDtos.Created create(DeviceDtos.CreateRequest request) {
         if (repository.existsByCode(request.code())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "code ja cadastrado");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "code already registered");
         }
         byte[] bytes = new byte[SECRET_BYTES];
         random.nextBytes(bytes);
@@ -68,16 +67,12 @@ public class DeviceService {
         Device device = require(code);
         if (device.isActive()) {
             device.setRevokedAt(Instant.now());
-            log.info("chave do dispositivo {} revogada", code);
+            log.info("revoked key for device {}", code);
         }
         return toResponse(device);
     }
 
-    /**
-     * Resolve a chave apresentada no header. Devolve vazio para chave malformada,
-     * dispositivo inexistente, dispositivo revogado ou segredo errado — de fora,
-     * os quatro casos sao indistinguiveis de proposito.
-     */
+    /** Empty for malformed, unknown, revoked or wrong: indistinguishable on purpose. */
     public Optional<DeviceDtos.Authenticated> authenticate(String presentedKey) {
         int separator = presentedKey.indexOf(KEY_SEPARATOR);
         if (separator <= 0 || separator == presentedKey.length() - 1) {
@@ -93,7 +88,7 @@ public class DeviceService {
 
     private Device require(String code) {
         return repository.findByCode(code).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.NOT_FOUND, "dispositivo nao encontrado"));
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "device not found"));
     }
 
     private static DeviceDtos.Response toResponse(Device device) {

@@ -24,30 +24,27 @@ public class AuthService {
 
     public AuthDtos.TokenResponse login(AuthDtos.LoginRequest request) {
         UserDtos.Account account = users.authenticate(request.email(), request.password())
-                .orElseThrow(() -> unauthorized("email ou senha invalidos"));
+                .orElseThrow(() -> unauthorized("invalid email or password"));
         return issue(account);
     }
 
-    /**
-     * Alem da assinatura, o refresh so vale enquanto a versao do token bater com a
-     * do banco. Incrementar {@code token_version} corta access e refresh juntos.
-     */
+    /** A refresh only holds while its token version still matches the database. */
     public AuthDtos.TokenResponse refresh(AuthDtos.RefreshRequest request) {
         Jwt token;
         try {
             token = jwt.decodeRefresh(request.refreshToken());
         } catch (JwtException e) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "refresh token invalido", e);
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid refresh token", e);
         }
 
         UUID userId = subjectOf(token);
         UserDtos.Account account = users.activeAccount(userId)
-                .orElseThrow(() -> unauthorized("usuario inexistente ou desabilitado"));
+                .orElseThrow(() -> unauthorized("user does not exist or is disabled"));
 
         Object claimedVersion = token.getClaim(JwtService.CLAIM_TOKEN_VERSION);
         if (!(claimedVersion instanceof Number number)
                 || number.intValue() != account.tokenVersion()) {
-            throw unauthorized("refresh token revogado");
+            throw unauthorized("refresh token revoked");
         }
         return issue(account);
     }
@@ -64,7 +61,7 @@ public class AuthService {
         try {
             return UUID.fromString(String.valueOf(token.getSubject()));
         } catch (IllegalArgumentException e) {
-            throw unauthorized("refresh token invalido");
+            throw unauthorized("invalid refresh token");
         }
     }
 

@@ -17,7 +17,7 @@ public final class AuthDtos {
             @NotBlank String refreshToken
     ) {}
 
-    /** {@code expiresIn} em segundos, para o cliente agendar o refresh. */
+    /** {@code expiresIn} in seconds. */
     public record TokenResponse(
             String accessToken,
             String refreshToken,

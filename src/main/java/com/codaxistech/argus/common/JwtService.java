@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
@@ -25,20 +27,12 @@ import java.util.Base64;
 import java.util.UUID;
 
 /**
- * Emissao de access e refresh token, assinados com RSA.
- *
- * <p>A claim {@code tv} carrega o {@code token_version} do usuario. Quem valida
- * compara com o banco: incrementar a coluna invalida na hora todos os tokens
- * daquele usuario, sem precisar de blacklist.
- *
- * <p>A chave privada vem do ambiente. Sem ela, um par efemero e gerado na subida:
- * a aplicacao funciona, mas todo token emitido morre junto com o processo e duas
- * instancias nao validam o token uma da outra.
+ * The {@code tv} claim carries the user's {@code token_version}, compared against
+ * the database on every request: bumping the column revokes every token at once.
  */
 @Service
 public class JwtService {
 
-    /** Distingue o refresh do access: um refresh nao serve para chamar a API. */
     public static final String CLAIM_TYPE = "typ";
     public static final String CLAIM_TOKEN_VERSION = "tv";
     public static final String CLAIM_ROLE = "role";
@@ -51,9 +45,8 @@ public class JwtService {
     private final String issuer;
     private final Duration accessTtl;
     private final Duration refreshTtl;
-    private final java.security.interfaces.RSAPublicKey publicKey;
+    private final RSAPublicKey publicKey;
     private final JwtEncoder encoder;
-    /** Decoder do refresh: assina/valida igual, mas exige typ=refresh. */
     private final NimbusJwtDecoder refreshDecoder;
 
     JwtService(@Value("${argus.jwt.issuer}") String issuer,
@@ -65,17 +58,17 @@ public class JwtService {
         this.accessTtl = accessTtl;
         this.refreshTtl = refreshTtl;
 
-        java.security.interfaces.RSAPublicKey pub;
-        java.security.interfaces.RSAPrivateKey priv;
+        RSAPublicKey pub;
+        RSAPrivateKey priv;
         if (hasText(privateKeyPem) && hasText(publicKeyPem)) {
             priv = readPrivateKey(privateKeyPem);
             pub = readPublicKey(publicKeyPem);
         } else {
-            log.warn("JWT_PRIVATE_KEY/JWT_PUBLIC_KEY ausentes: gerando par RSA efemero. "
-                    + "Todo token emitido perde a validade quando a aplicacao reiniciar.");
+            log.warn("JWT_PRIVATE_KEY/JWT_PUBLIC_KEY not set: generating an ephemeral RSA pair. "
+                    + "Every issued token becomes invalid when the application restarts.");
             KeyPair pair = generateKeyPair();
-            pub = (java.security.interfaces.RSAPublicKey) pair.getPublic();
-            priv = (java.security.interfaces.RSAPrivateKey) pair.getPrivate();
+            pub = (RSAPublicKey) pair.getPublic();
+            priv = (RSAPrivateKey) pair.getPrivate();
         }
         this.publicKey = pub;
         this.encoder = NimbusJwtEncoder.withKeyPair(pub, priv)
@@ -85,21 +78,7 @@ public class JwtService {
         this.refreshDecoder.setJwtValidator(JwtValidators.createDefaultWithIssuer(issuer));
     }
 
-    /**
-     * Valida um refresh token: assinatura, validade, emissor e {@code typ}.
-     * A conferencia da versao contra o banco fica com quem chamou.
-     *
-     * @throws org.springframework.security.oauth2.jwt.JwtException se nao prestar
-     */
-    public Jwt decodeRefresh(String token) {
-        Jwt jwt = refreshDecoder.decode(token);
-        if (!TYPE_REFRESH.equals(jwt.getClaimAsString(CLAIM_TYPE))) {
-            throw new BadJwtException("token nao e um refresh token");
-        }
-        return jwt;
-    }
-
-    public java.security.interfaces.RSAPublicKey publicKey() {
+    public RSAPublicKey publicKey() {
         return publicKey;
     }
 
@@ -113,6 +92,15 @@ public class JwtService {
 
     public String issueRefresh(UUID userId, String email, String role, int tokenVersion) {
         return issue(userId, email, role, tokenVersion, TYPE_REFRESH, refreshTtl);
+    }
+
+    /** Checks signature, expiry, issuer and type. Version check is the caller's job. */
+    public Jwt decodeRefresh(String token) {
+        Jwt jwt = refreshDecoder.decode(token);
+        if (!TYPE_REFRESH.equals(jwt.getClaimAsString(CLAIM_TYPE))) {
+            throw new BadJwtException("not a refresh token");
+        }
+        return jwt;
     }
 
     private String issue(UUID userId, String email, String role, int tokenVersion,
@@ -142,42 +130,34 @@ public class JwtService {
             generator.initialize(2048);
             return generator.generateKeyPair();
         } catch (Exception e) {
-            throw new IllegalStateException("nao foi possivel gerar o par RSA", e);
+            throw new IllegalStateException("could not generate an RSA key pair", e);
         }
     }
 
-    private static java.security.interfaces.RSAPrivateKey readPrivateKey(String pem) {
+    private static RSAPrivateKey readPrivateKey(String pem) {
         try {
-            byte[] der = decodePem(pem);
-            return (java.security.interfaces.RSAPrivateKey) KeyFactory.getInstance("RSA")
-                    .generatePrivate(new PKCS8EncodedKeySpec(der));
+            return (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                    .generatePrivate(new PKCS8EncodedKeySpec(decodePem(pem)));
         } catch (Exception e) {
-            throw new IllegalStateException(
-                    "argus.jwt.private-key nao e uma chave RSA PKCS#8 valida", e);
+            throw new IllegalStateException("argus.jwt.private-key is not a valid PKCS#8 RSA key", e);
         }
     }
 
-    private static java.security.interfaces.RSAPublicKey readPublicKey(String pem) {
+    private static RSAPublicKey readPublicKey(String pem) {
         try {
-            byte[] der = decodePem(pem);
-            return (java.security.interfaces.RSAPublicKey) KeyFactory.getInstance("RSA")
-                    .generatePublic(new X509EncodedKeySpec(der));
+            return (RSAPublicKey) KeyFactory.getInstance("RSA")
+                    .generatePublic(new X509EncodedKeySpec(decodePem(pem)));
         } catch (Exception e) {
-            throw new IllegalStateException(
-                    "argus.jwt.public-key nao e uma chave RSA X.509 valida", e);
+            throw new IllegalStateException("argus.jwt.public-key is not a valid X.509 RSA key", e);
         }
     }
 
-    /**
-     * Aceita PEM com cabecalho/rodape e com as quebras de linha achatadas em
-     * {@code \n} literal, que e como uma chave costuma chegar por variavel de
-     * ambiente.
-     */
+    /** Tolerates PEM headers and newlines flattened to a literal backslash-n, as env vars carry them. */
     private static byte[] decodePem(String pem) {
-        String body = pem.replace("\n", "\n")
+        String body = pem.replace("\\n", "\n")
                 .replaceAll("-----BEGIN [A-Z ]+-----", "")
                 .replaceAll("-----END [A-Z ]+-----", "")
-                .replaceAll("\s", "");
+                .replaceAll("\\s", "");
         return Base64.getDecoder().decode(body);
     }
 }

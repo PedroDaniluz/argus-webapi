@@ -14,14 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * Entrada dos dispositivos. Fica sob {@code /api/ingest} porque essa e a fatia
- * que a cadeia de seguranca do {@code X-Device-Key} cobre — nenhum endpoint de
- * usuario mora aqui.
- */
+/** Under {@code /api/ingest} because that is the slice the X-Device-Key chain covers. */
 @RestController
 @RequestMapping("/api/ingest")
-@Tag(name = "ingest", description = "Contrato entre firmware e backend")
+@Tag(name = "ingest", description = "Contract between firmware and backend")
 @SecurityRequirement(name = "deviceKey")
 public class LocationIngestController {
 
@@ -31,26 +27,20 @@ public class LocationIngestController {
         this.service = service;
     }
 
-    /**
-     * 202 e nao 201: a ingestao e assincrona do ponto de vista da placa, que nao
-     * espera consistencia nem consulta o recurso criado depois.
-     */
+    /** 202, not 201: the board does not wait for consistency nor read the resource back. */
     @PostMapping("/locations")
-    @Operation(summary = "Recebe um lote de ate 50 amostras",
-            description = "Idempotente por (dispositivo, ts): reenviar o mesmo buffer nao duplica.")
+    @Operation(summary = "Accept a batch of up to 50 samples",
+            description = "Idempotent per (device, ts): resending the same buffer stores nothing twice.")
     public ResponseEntity<LocationDtos.IngestResponse> ingest(
             @AuthenticationPrincipal DeviceDtos.Authenticated device,
             @Valid @RequestBody LocationDtos.IngestRequest request) {
 
-        // O deviceCode do corpo tem que casar com a chave apresentada, senao um
-        // dispositivo com chave valida poderia escrever no rastro de outro.
+        // Otherwise a device with a valid key could write into another device's track.
         if (!device.code().equals(request.deviceCode())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "deviceCode nao corresponde a chave apresentada");
+                    "deviceCode does not match the presented key");
         }
-
-        LocationDtos.IngestResponse response =
-                service.ingest(device.id(), device.code(), request.samples());
-        return ResponseEntity.accepted().body(response);
+        return ResponseEntity.accepted()
+                .body(service.ingest(device.id(), device.code(), request.samples()));
     }
 }

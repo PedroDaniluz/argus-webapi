@@ -15,13 +15,7 @@ import lombok.Setter;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Conta de acesso ao painel. Nao existe auto-cadastro: contas sao criadas por
- * ADMIN ou pelo seed.
- *
- * <p>A tabela e {@code app_user} porque {@code user} e palavra reservada no
- * Postgres.
- */
+/** Table is {@code app_user} because {@code user} is reserved in Postgres. */
 @Entity
 @Table(name = "app_user")
 @Getter
@@ -50,10 +44,7 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
-    /**
-     * Vai na claim {@code tv} do token. Incrementar invalida na hora todo token
-     * ja emitido para este usuario.
-     */
+    /** Token's {@code tv} claim. Bumping it revokes every issued token. */
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;
 

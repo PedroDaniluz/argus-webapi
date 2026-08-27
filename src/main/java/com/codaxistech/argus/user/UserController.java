@@ -1,6 +1,7 @@
 package com.codaxistech.argus.user;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +17,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
-@Tag(name = "users", description = "Contas de acesso ao painel")
+@Tag(name = "users", description = "Dashboard accounts")
+@SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
     private final UserService service;
@@ -27,18 +29,16 @@ public class UserController {
 
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Lista as contas")
+    @Operation(summary = "List accounts")
     public List<UserDtos.Response> list() {
         return service.list();
     }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Cria uma conta", description = "Nao existe auto-cadastro: contas sao delegadas.")
+    @Operation(summary = "Create an account", description = "There is no self sign-up.")
     public ResponseEntity<UserDtos.Response> create(@Valid @RequestBody UserDtos.CreateRequest request) {
         UserDtos.Response created = service.create(request);
-        return ResponseEntity
-                .created(URI.create("/api/users/" + created.id()))
-                .body(created);
+        return ResponseEntity.created(URI.create("/api/users/" + created.id())).body(created);
     }
 }

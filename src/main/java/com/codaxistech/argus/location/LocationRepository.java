@@ -15,9 +15,8 @@ public interface LocationRepository extends JpaRepository<Location, Long> {
     Optional<Location> findFirstByDeviceIdOrderByTsDesc(UUID deviceId);
 
     /**
-     * Paginacao por keyset: {@code ts < cursor}, nunca OFFSET. Em tabela
-     * append-only grande o OFFSET degrada linearmente, porque o banco precisa
-     * varrer e descartar tudo que ficou para tras.
+     * Keyset pagination: {@code ts < cursor}, never OFFSET, which degrades linearly on
+     * a large append-only table.
      */
     @Query("""
             SELECT l FROM Location l

@@ -16,20 +16,10 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Autentica o dispositivo pelo header {@code X-Device-Key}.
+ * Deliberately not a bean: Boot would register it for every request and a device key
+ * would start working on user endpoints. Only the /api/ingest chain builds it.
  *
- * <p>Header proprio em vez de {@code Authorization} porque o esquema e outro:
- * chave opaca de longa duracao, sem refresh, revogavel individualmente. Manter
- * separado deixa espaco para acrescentar {@code X-Device-Signature}
- * (HMAC-SHA256 do corpo mais {@code ts}) sem quebrar o contrato do firmware.
- *
- * <p>O filtro nao rejeita ninguem: chave ausente ou invalida simplesmente nao
- * autentica, e a cadeia de seguranca devolve 401 pelo entry point. Assim so
- * existe um lugar que formata erro de autenticacao.
- *
- * <p>Nao e um bean de proposito. Como bean, o Boot registraria o filtro para
- * toda requisicao e uma chave de dispositivo passaria a valer nos endpoints de
- * usuario. Ele e instanciado pela cadeia de /api/ingest e so vive la.
+ * <p>Rejects nobody: a bad key just fails to authenticate and the entry point answers 401.
  */
 public class DeviceAuthFilter extends OncePerRequestFilter {
 
@@ -54,7 +44,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
                         device.get(), null, List.of(new SimpleGrantedAuthority(ROLE)));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } else {
-                logger.warn("X-Device-Key rejeitada em " + request.getRequestURI());
+                logger.warn("rejected X-Device-Key on " + request.getRequestURI());
             }
         }
         chain.doFilter(request, response);

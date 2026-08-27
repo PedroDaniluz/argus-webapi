@@ -15,7 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/locations")
-@Tag(name = "locations", description = "Consulta de posicoes")
+@Tag(name = "locations", description = "Position queries")
 @SecurityRequirement(name = "bearerAuth")
 public class LocationController {
 
@@ -26,22 +26,21 @@ public class LocationController {
     }
 
     @GetMapping
-    @Operation(summary = "Historico de um dispositivo",
-            description = "Ordenado do mais recente para o mais antigo. Para paginar, "
-                    + "reenvie o nextCursor da resposta anterior no parametro to.")
+    @Operation(summary = "History for one device",
+            description = "Newest first. To page, send the previous response's nextCursor back as to.")
     public LocationDtos.Page history(
-            @Parameter(description = "code do dispositivo", example = "trator-01")
+            @Parameter(description = "device code", example = "trator-01")
             @RequestParam("device") String device,
-            @Parameter(description = "limite inferior inclusivo, ISO-8601")
+            @Parameter(description = "inclusive lower bound, ISO-8601")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @Parameter(description = "cursor exclusivo, ISO-8601")
+            @Parameter(description = "exclusive cursor, ISO-8601")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(required = false) Integer limit) {
         return service.history(device, from, to, limit);
     }
 
     @GetMapping("/latest")
-    @Operation(summary = "Ultima posicao de cada dispositivo")
+    @Operation(summary = "Last position of each device")
     public List<LocationDtos.Response> latest() {
         return service.latest();
     }

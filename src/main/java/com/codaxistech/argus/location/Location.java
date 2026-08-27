@@ -14,12 +14,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Uma amostra de posicao. O pacote e {@code location} e nao {@code position}
- * porque POSITION e palavra reservada em SQL.
+ * Package is {@code location}, not {@code position}: POSITION is reserved in SQL.
  *
- * <p>{@code deviceId} e a coluna crua, nao um {@code @ManyToOne}: a chave
- * estrangeira continua valendo no banco e o pacote nao passa a depender da
- * entidade {@code Device}.
+ * <p>{@code deviceId} is the raw column, not a {@code @ManyToOne}: the foreign key
+ * still holds, and this package keeps no dependency on the {@code Device} entity.
  */
 @Entity
 @Table(name = "location")
@@ -35,14 +33,11 @@ public class Location {
     @Column(name = "device_id", nullable = false)
     private UUID deviceId;
 
-    /** Hora do GNSS. Relogio atomico de satelite: preciso, sem deriva, sem NTP. */
+    /** GNSS time: satellite atomic clock, no drift, no NTP. */
     @Column(nullable = false)
     private Instant ts;
 
-    /**
-     * DOUBLE PRECISION porque float de 32 bits custa 1 a 2 m de erro, que e
-     * exatamente a ordem de grandeza que estamos medindo.
-     */
+    /** DOUBLE PRECISION: a 32-bit float costs 1 to 2 m, the scale being measured. */
     @Column(nullable = false)
     private double lat;
 
@@ -59,7 +54,7 @@ public class Location {
 
     private Float hdop;
 
-    /** Quando chegou. A diferenca para {@code ts} diz quanto tempo ficou em buffer. */
+    /** Distance from {@code ts} is how long the sample sat in a buffer. */
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt = Instant.now();
 }

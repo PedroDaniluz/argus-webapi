@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/auth")
-@Tag(name = "auth", description = "Emissao e renovacao de token de usuario")
+@Tag(name = "auth", description = "User token issuing and renewal")
 public class AuthController {
 
     private final AuthService service;
@@ -20,13 +20,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Troca email e senha por um par de tokens")
+    @Operation(summary = "Exchange email and password for a token pair")
     public AuthDtos.TokenResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
         return service.login(request);
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Troca um refresh token valido por um par novo")
+    @Operation(summary = "Exchange a valid refresh token for a new pair")
     public AuthDtos.TokenResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
         return service.refresh(request);
     }

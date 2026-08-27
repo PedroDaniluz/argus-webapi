@@ -2,7 +2,6 @@ package com.codaxistech.argus.common;
 
 import com.codaxistech.argus.device.DeviceFacade;
 import com.codaxistech.argus.user.UserFacade;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -10,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -22,6 +22,7 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -33,21 +34,14 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Dois esquemas de autenticacao, separados por path e por cadeia.
- *
- * <ul>
- *   <li>{@code /api/ingest/**} - dispositivo, header {@code X-Device-Key}.</li>
- *   <li>o resto - usuario, JWT Bearer.</li>
- * </ul>
- *
- * <p>Cadeias separadas em vez de um filtro que tenta os dois: cada uma tem seu
- * proprio conjunto de filtros, e uma chave de dispositivo nunca chega perto de
- * um endpoint de usuario nem vice-versa.
+ * Two schemes on separate chains: {@code /api/ingest/**} for devices via
+ * {@code X-Device-Key}, everything else for users via JWT bearer.
  */
 @Configuration
 @EnableMethodSecurity
@@ -68,11 +62,10 @@ public class SecurityConfig {
     @Order(1)
     SecurityFilterChain ingest(HttpSecurity http, DeviceFacade devices,
                                AuthenticationEntryPoint entryPoint,
-                               AccessDeniedHandler accessDeniedHandler,
-                               CorsConfigurationSource cors) throws Exception {
+                               AccessDeniedHandler accessDeniedHandler) throws Exception {
         return http
                 .securityMatcher("/api/ingest/**")
-                .cors(c -> c.configurationSource(cors))
+                .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -89,10 +82,9 @@ public class SecurityConfig {
     @Order(2)
     SecurityFilterChain api(HttpSecurity http, JwtDecoder jwtDecoder,
                             AuthenticationEntryPoint entryPoint,
-                            AccessDeniedHandler accessDeniedHandler,
-                            CorsConfigurationSource cors) throws Exception {
+                            AccessDeniedHandler accessDeniedHandler) throws Exception {
         return http
-                .cors(c -> c.configurationSource(cors))
+                .cors(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -116,10 +108,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Alem de assinatura e validade, o decoder confere a versao do token contra o
-     * banco - e o que torna a revogacao instantanea, sem blacklist.
-     */
     @Bean
     JwtDecoder jwtDecoder(JwtService jwtService, UserFacade users,
                           @Value("${argus.jwt.issuer}") String issuer) {
@@ -145,8 +133,7 @@ public class SecurityConfig {
     CorsConfigurationSource corsConfigurationSource(
             @Value("${argus.cors.allowed-origins}") List<String> allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();
-        // allowedOriginPatterns aceita curinga. Nao usamos cookie, entao
-        // allowCredentials fica false e o curinga continua valido.
+        // Patterns, not plain origins, so a wildcard works. No cookies, so credentials stay off.
         config.setAllowedOriginPatterns(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
@@ -163,14 +150,14 @@ public class SecurityConfig {
     AuthenticationEntryPoint apiAuthenticationEntryPoint(ObjectMapper mapper) {
         return (request, response, authException) -> write(mapper, response,
                 HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
-                "credencial ausente ou invalida", request.getRequestURI());
+                "missing or invalid credentials", request.getRequestURI());
     }
 
     @Bean
     AccessDeniedHandler apiAccessDeniedHandler(ObjectMapper mapper) {
         return (request, response, deniedException) -> write(mapper, response,
                 HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                "sem permissao para este recurso", request.getRequestURI());
+                "not allowed on this resource", request.getRequestURI());
     }
 
     private static void write(ObjectMapper mapper, HttpServletResponse response,
@@ -182,42 +169,39 @@ public class SecurityConfig {
         mapper.writeValue(response.getOutputStream(), ApiError.of(status, error, message, path));
     }
 
-    /** Recusa token emitido por outra instalacao. */
     record IssuerValidator(String issuer) implements OAuth2TokenValidator<Jwt> {
 
         @Override
         public OAuth2TokenValidatorResult validate(Jwt jwt) {
-            String actual = jwt.getIssuer() == null ? null : jwt.getIssuer().toString();
+            // Not getIssuer(): it coerces to URL and throws when the issuer is not one.
+            String actual = jwt.getClaimAsString(JwtClaimNames.ISS);
             return issuer.equals(actual)
                     ? OAuth2TokenValidatorResult.success()
-                    : fail("invalid_issuer", "emissor do token nao confere");
+                    : fail("invalid_issuer", "token issuer does not match");
         }
     }
 
-    /**
-     * Recusa refresh token usado como access token, e token cuja versao ficou para
-     * tras - usuario desabilitado ou com token_version incrementado.
-     */
+    /** Rejects a refresh token used as an access token, and any stale token version. */
     record AccessTokenValidator(UserFacade users) implements OAuth2TokenValidator<Jwt> {
 
         @Override
         public OAuth2TokenValidatorResult validate(Jwt jwt) {
             if (!JwtService.TYPE_ACCESS.equals(jwt.getClaimAsString(JwtService.CLAIM_TYPE))) {
-                return fail("invalid_token_type", "este token nao serve para chamar a API");
+                return fail("invalid_token_type", "this token cannot be used to call the API");
             }
             UUID userId;
             try {
                 userId = UUID.fromString(String.valueOf(jwt.getSubject()));
             } catch (IllegalArgumentException e) {
-                return fail("invalid_subject", "sub do token nao e um id de usuario");
+                return fail("invalid_subject", "token subject is not a user id");
             }
             Integer current = users.currentTokenVersion(userId).orElse(null);
             if (current == null) {
-                return fail("user_unavailable", "usuario inexistente ou desabilitado");
+                return fail("user_unavailable", "user does not exist or is disabled");
             }
             Object claimed = jwt.getClaim(JwtService.CLAIM_TOKEN_VERSION);
             if (!(claimed instanceof Number number) || number.intValue() != current) {
-                return fail("token_revoked", "token revogado");
+                return fail("token_revoked", "token revoked");
             }
             return OAuth2TokenValidatorResult.success();
         }

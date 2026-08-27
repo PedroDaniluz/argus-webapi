@@ -1,10 +1,5 @@
 package com.codaxistech.argus.user;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -19,46 +14,12 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class UserService {
 
-    private static final Logger log = LoggerFactory.getLogger(UserService.class);
-
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
-    private final String adminEmail;
-    private final String adminPassword;
 
-    UserService(UserRepository repository, PasswordEncoder passwordEncoder,
-                @Value("${argus.admin.email:}") String adminEmail,
-                @Value("${argus.admin.password:}") String adminPassword) {
+    UserService(UserRepository repository, PasswordEncoder passwordEncoder) {
         this.repository = repository;
         this.passwordEncoder = passwordEncoder;
-        this.adminEmail = adminEmail;
-        this.adminPassword = adminPassword;
-    }
-
-    /**
-     * Cria o primeiro ADMIN a partir do ambiente, e so enquanto a tabela estiver
-     * vazia. Como nao existe auto-cadastro, sem isto nao ha primeiro login e a
-     * instalacao fica inacessivel. Nao e migration porque senha em arquivo
-     * versionado vira senha publica.
-     */
-    @EventListener(ApplicationReadyEvent.class)
-    @Transactional
-    public void bootstrapAdmin() {
-        if (repository.count() > 0) {
-            return;
-        }
-        if (adminEmail.isBlank() || adminPassword.isBlank()) {
-            log.error("nenhum usuario cadastrado e ARGUS_ADMIN_EMAIL/ARGUS_ADMIN_PASSWORD "
-                    + "estao vazias: nao ha como fazer login. Preencha as duas e suba de novo.");
-            return;
-        }
-        User admin = new User();
-        admin.setEmail(adminEmail.trim().toLowerCase());
-        admin.setPasswordHash(passwordEncoder.encode(adminPassword));
-        admin.setName("Administrador");
-        admin.setRole(User.Role.ADMIN);
-        repository.save(admin);
-        log.info("ADMIN inicial criado para {}", admin.getEmail());
     }
 
     public List<UserDtos.Response> list() {
@@ -68,7 +29,7 @@ public class UserService {
     @Transactional
     public UserDtos.Response create(UserDtos.CreateRequest request) {
         if (repository.existsByEmailIgnoreCase(request.email())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "email ja cadastrado");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "email already registered");
         }
         User user = new User();
         user.setEmail(request.email().trim().toLowerCase());
@@ -78,10 +39,7 @@ public class UserService {
         return toResponse(repository.save(user));
     }
 
-    /**
-     * Confere a senha aqui dentro para o hash nao precisar sair do pacote.
-     * Usuario desabilitado nao autentica.
-     */
+    /** Checked here so the hash never leaves the package. */
     public Optional<UserDtos.Account> authenticate(String email, String rawPassword) {
         return repository.findByEmailIgnoreCase(email)
                 .filter(User::isActive)
@@ -97,11 +55,10 @@ public class UserService {
         return repository.findById(id).filter(User::isActive).map(User::getTokenVersion);
     }
 
-    /** Revoga todo token ja emitido para o usuario. */
     @Transactional
     public void bumpTokenVersion(UUID id) {
         User user = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "usuario nao encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
         user.setTokenVersion(user.getTokenVersion() + 1);
     }
 
