@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/auth")
 @Tag(name = "auth", description = "User token issuing and renewal")
-public class AuthController {
+class AuthController {
 
     private final AuthService service;
 
@@ -21,13 +21,13 @@ public class AuthController {
 
     @PostMapping("/login")
     @Operation(operationId = "login", summary = "Exchange email and password for a token pair")
-    public AuthDtos.TokenResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
+    TokenResponse login(@Valid @RequestBody LoginRequest request) {
         return service.login(request);
     }
 
     @PostMapping("/refresh")
     @Operation(operationId = "refreshToken", summary = "Exchange a valid refresh token for a new pair")
-    public AuthDtos.TokenResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
+    TokenResponse refresh(@Valid @RequestBody RefreshRequest request) {
         return service.refresh(request);
     }
 }

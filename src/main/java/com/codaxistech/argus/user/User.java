@@ -9,8 +9,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -19,13 +17,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "app_user")
 @Getter
-@Setter
-@NoArgsConstructor
-public class User {
-
-    public enum Role {
-        ADMIN, OPERATOR, VIEWER
-    }
+class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -44,7 +36,7 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
-    /** Token's {@code tv} claim. Bumping it revokes every issued token. */
+    /** Goes into the {@code tv} claim. Bumping it invalidates every issued token. */
     @Column(name = "token_version", nullable = false)
     private int tokenVersion;
 
@@ -54,7 +46,17 @@ public class User {
     @Column(name = "disabled_at")
     private Instant disabledAt;
 
-    public boolean isActive() {
+    protected User() {
+    }
+
+    User(String email, String passwordHash, String name, Role role) {
+        this.email = email;
+        this.passwordHash = passwordHash;
+        this.name = name;
+        this.role = role;
+    }
+
+    boolean isActive() {
         return disabledAt == null;
     }
 }

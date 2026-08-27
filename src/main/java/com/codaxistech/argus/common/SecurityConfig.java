@@ -2,12 +2,14 @@ package com.codaxistech.argus.common;
 
 import com.codaxistech.argus.device.DeviceFacade;
 import com.codaxistech.argus.user.UserFacade;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -36,6 +38,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -45,7 +48,7 @@ import java.util.UUID;
  */
 @Configuration
 @EnableMethodSecurity
-public class SecurityConfig {
+class SecurityConfig {
 
     static final String[] PUBLIC_PATHS = {
             "/auth/**",
@@ -148,25 +151,24 @@ public class SecurityConfig {
 
     @Bean
     AuthenticationEntryPoint apiAuthenticationEntryPoint(ObjectMapper mapper) {
-        return (request, response, authException) -> write(mapper, response,
-                HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
-                "missing or invalid credentials", request.getRequestURI());
+        return (request, response, exception) -> write(mapper, response, request,
+                HttpStatus.UNAUTHORIZED, "missing or invalid credentials");
     }
 
     @Bean
     AccessDeniedHandler apiAccessDeniedHandler(ObjectMapper mapper) {
-        return (request, response, deniedException) -> write(mapper, response,
-                HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                "not allowed on this resource", request.getRequestURI());
+        return (request, response, exception) -> write(mapper, response, request,
+                HttpStatus.FORBIDDEN, "not allowed on this resource");
     }
 
     private static void write(ObjectMapper mapper, HttpServletResponse response,
-                              int status, String error, String message, String path)
-            throws java.io.IOException {
-        response.setStatus(status);
+                              HttpServletRequest request, HttpStatus status, String message)
+            throws IOException {
+        response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        mapper.writeValue(response.getOutputStream(), ApiError.of(status, error, message, path));
+        mapper.writeValue(response.getOutputStream(),
+                ApiError.of(status, message, request.getRequestURI(), null));
     }
 
     record IssuerValidator(String issuer) implements OAuth2TokenValidator<Jwt> {

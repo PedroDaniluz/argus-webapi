@@ -1,6 +1,5 @@
 package com.codaxistech.argus.location;
 
-import com.codaxistech.argus.device.DeviceDtos;
 import com.codaxistech.argus.device.DeviceFacade;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +27,7 @@ import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
-public class LocationService {
+class LocationService {
 
     static final int MAX_LIMIT = 1000;
     static final int DEFAULT_LIMIT = 500;
@@ -63,14 +62,14 @@ public class LocationService {
 
     /** After a buffer replay, duplicates and out-of-order samples are normal, not errors. */
     @Transactional
-    public LocationDtos.IngestResponse ingest(UUID deviceId, String deviceCode,
-                                              List<LocationDtos.Sample> samples) {
+    IngestLocationsResponse ingest(UUID deviceId, String deviceCode,
+                                              List<LocationSample> samples) {
         int received = samples.size();
-        List<LocationDtos.Sample> candidates = new ArrayList<>(received);
+        List<LocationSample> candidates = new ArrayList<>(received);
         Set<Long> seen = new HashSet<>();
         int invalid = 0;
 
-        for (LocationDtos.Sample sample : samples) {
+        for (LocationSample sample : samples) {
             if (!isValid(sample)) {
                 invalid++;
                 continue;
@@ -84,26 +83,26 @@ public class LocationService {
             log.warn("device {}: dropped {} of {} samples as invalid", deviceCode, invalid, received);
         }
         if (candidates.isEmpty()) {
-            return new LocationDtos.IngestResponse(received, 0, received - invalid);
+            return new IngestLocationsResponse(received, 0, received - invalid);
         }
 
-        List<LocationDtos.Response> stored = insert(deviceId, deviceCode, candidates);
+        List<LocationResponse> stored = insert(deviceId, deviceCode, candidates);
         if (!stored.isEmpty()) {
-            events.publishEvent(new LocationDtos.Stored(stored));
+            events.publishEvent(new LocationsStored(stored));
         }
-        return new LocationDtos.IngestResponse(received, stored.size(),
+        return new IngestLocationsResponse(received, stored.size(),
                 received - invalid - stored.size());
     }
 
-    private List<LocationDtos.Response> insert(UUID deviceId, String deviceCode,
-                                               List<LocationDtos.Sample> samples) {
+    private List<LocationResponse> insert(UUID deviceId, String deviceCode,
+                                               List<LocationSample> samples) {
         String sql = INSERT.formatted(String.join(", ", Collections.nCopies(samples.size(), ROW)));
-        RowMapper<LocationDtos.Response> mapper = (rs, rowNum) -> toResponse(rs, deviceCode);
+        RowMapper<LocationResponse> mapper = (rs, rowNum) -> fromRow(rs, deviceCode);
 
         return jdbc.query(connection -> {
             PreparedStatement ps = connection.prepareStatement(sql);
             int i = 1;
-            for (LocationDtos.Sample sample : samples) {
+            for (LocationSample sample : samples) {
                 ps.setObject(i++, deviceId);
                 ps.setObject(i++, OffsetDateTime.ofInstant(
                         Instant.ofEpochSecond(sample.ts()), ZoneOffset.UTC));
@@ -122,7 +121,7 @@ public class LocationService {
     }
 
     /** A bad GNSS read, not data: better dropped than drawn in the middle of the ocean. */
-    private static boolean isValid(LocationDtos.Sample sample) {
+    private static boolean isValid(LocationSample sample) {
         if (sample == null || sample.ts() == null || sample.lat() == null || sample.lon() == null) {
             return false;
         }
@@ -138,49 +137,42 @@ public class LocationService {
     }
 
     /** Newest first. {@code to} doubles as the cursor. */
-    public LocationDtos.Page history(String deviceCode, Instant from, Instant to, Integer limit) {
-        DeviceDtos.Response device = devices.byCode(deviceCode);
+    LocationPage history(String deviceCode, Instant from, Instant to, Integer limit) {
+        UUID deviceId = devices.requireIdByCode(deviceCode);
         int size = normalizeLimit(limit);
         Instant start = from != null ? from : Instant.EPOCH;
         Instant cursor = to != null ? to : Instant.now().plusSeconds(86_400);
 
-        List<LocationDtos.Response> items = repository
-                .history(device.id(), start, cursor, Limit.of(size)).stream()
-                .map(location -> toResponse(location, device.code()))
+        List<LocationResponse> items = repository
+                .history(deviceId, start, cursor, Limit.of(size)).stream()
+                .map(location -> LocationResponse.from(location, deviceCode))
                 .toList();
 
         Instant next = items.size() < size ? null : items.getLast().ts();
-        return new LocationDtos.Page(items, next);
+        return new LocationPage(items, next);
     }
 
     /** Devices that never reported are left out. */
-    public List<LocationDtos.Response> latest() {
-        return devices.all().stream()
-                .map(device -> lastFor(device.id(), device.code()))
+    List<LocationResponse> latest() {
+        return devices.codesById().entrySet().stream()
+                .map(device -> lastFor(device.getKey(), device.getValue()))
                 .flatMap(Optional::stream)
                 .toList();
     }
 
-    public Optional<LocationDtos.Response> lastFor(UUID deviceId, String deviceCode) {
+    Optional<LocationResponse> lastFor(UUID deviceId, String deviceCode) {
         return repository.findFirstByDeviceIdOrderByTsDesc(deviceId)
-                .map(location -> toResponse(location, deviceCode));
+                .map(location -> LocationResponse.from(location, deviceCode));
     }
 
     private static int normalizeLimit(Integer limit) {
         return limit == null || limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
     }
 
-    private static LocationDtos.Response toResponse(Location location, String deviceCode) {
-        return new LocationDtos.Response(
-                location.getId(), deviceCode, location.getTs(),
-                location.getLat(), location.getLon(),
-                location.getSpeedMps(), location.getCourseDeg(),
-                location.getSats(), location.getHdop(), location.getReceivedAt());
-    }
 
-    private static LocationDtos.Response toResponse(ResultSet rs, String deviceCode)
+    private static LocationResponse fromRow(ResultSet rs, String deviceCode)
             throws SQLException {
-        return new LocationDtos.Response(
+        return new LocationResponse(
                 rs.getLong("id"),
                 deviceCode,
                 rs.getObject("ts", OffsetDateTime.class).toInstant(),

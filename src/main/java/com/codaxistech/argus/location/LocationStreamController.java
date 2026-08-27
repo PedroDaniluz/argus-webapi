@@ -31,7 +31,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @RequestMapping("/api/locations")
 @Tag(name = "locations", description = "Position queries")
 @SecurityRequirement(name = "bearerAuth")
-public class LocationStreamController {
+class LocationStreamController {
 
     private static final Logger log = LoggerFactory.getLogger(LocationStreamController.class);
 
@@ -74,8 +74,8 @@ public class LocationStreamController {
 
     /** After commit, never during: a rollback could still erase what was pushed. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    void onStored(LocationDtos.Stored event) {
-        for (LocationDtos.Response location : event.locations()) {
+    void onStored(LocationsStored event) {
+        for (LocationResponse location : event.locations()) {
             for (Subscription subscription : subscriptions) {
                 if (subscription.accepts(location)) {
                     send(subscription, SseEmitter.event()
@@ -108,7 +108,7 @@ public class LocationStreamController {
 
     private record Subscription(SseEmitter emitter, String deviceCode) {
 
-        boolean accepts(LocationDtos.Response location) {
+        boolean accepts(LocationResponse location) {
             return deviceCode == null || deviceCode.equals(location.deviceCode());
         }
     }

@@ -17,8 +17,11 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.HashSet;
+import java.util.Set;
+
 @Configuration
-public class OpenApiConfig {
+class OpenApiConfig {
 
     public static final String BEARER_SCHEME = "bearerAuth";
     public static final String DEVICE_KEY_SCHEME = "deviceKey";
@@ -108,5 +111,64 @@ public class OpenApiConfig {
                 .content(new Content().addMediaType("application/json",
                         new MediaType().schema(new Schema<>()
                                 .$ref("#/components/schemas/" + API_ERROR_SCHEMA)))));
+    }
+
+    /**
+     * Marks every property of every response schema required.
+     *
+     * Jackson serialises all fields, so a response never omits one; absence is
+     * expressed by {@code nullable}. Without this the generated client types every
+     * field as optional and each call site pays for it. Request schemas are left
+     * alone, where Bean Validation already decides what is required.
+     */
+    @Bean
+    OpenApiCustomizer requiredResponseProperties() {
+        return openApi -> {
+            Set<String> schemas = new HashSet<>();
+            openApi.getPaths().values().forEach(path -> path.readOperations().forEach(operation ->
+                    operation.getResponses().values().forEach(response -> {
+                        if (response.getContent() != null) {
+                            response.getContent().values()
+                                    .forEach(media -> collect(media.getSchema(), openApi, schemas));
+                        }
+                    })));
+
+            for (String name : schemas) {
+                Schema<?> schema = openApi.getComponents().getSchemas().get(name);
+                if (schema == null || schema.getProperties() == null) {
+                    continue;
+                }
+                for (String property : schema.getProperties().keySet()) {
+                    if (schema.getRequired() == null || !schema.getRequired().contains(property)) {
+                        schema.addRequiredItem(property);
+                    }
+                }
+            }
+        };
+    }
+
+    private static void collect(Schema<?> schema, OpenAPI openApi, Set<String> found) {
+        if (schema == null) {
+            return;
+        }
+        String ref = schema.get$ref();
+        if (ref != null) {
+            String name = ref.substring(ref.lastIndexOf('/') + 1);
+            if (found.add(name)) {
+                Schema<?> target = openApi.getComponents().getSchemas().get(name);
+                if (target != null) {
+                    if (target.getProperties() != null) {
+                        target.getProperties().values()
+                                .forEach(property -> collect(property, openApi, found));
+                    }
+                    collect(target.getItems(), openApi, found);
+                }
+            }
+            return;
+        }
+        collect(schema.getItems(), openApi, found);
+        if (schema.getAnyOf() != null) {
+            schema.getAnyOf().forEach(option -> collect(option, openApi, found));
+        }
     }
 }

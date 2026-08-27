@@ -1,6 +1,5 @@
 package com.codaxistech.argus.common;
 
-import com.codaxistech.argus.device.DeviceDtos;
 import com.codaxistech.argus.device.DeviceFacade;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,14 +20,14 @@ import java.util.Optional;
  *
  * <p>Rejects nobody: a bad key just fails to authenticate and the entry point answers 401.
  */
-public class DeviceAuthFilter extends OncePerRequestFilter {
+class DeviceAuthFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Device-Key";
     public static final String ROLE = "ROLE_DEVICE";
 
     private final DeviceFacade devices;
 
-    public DeviceAuthFilter(DeviceFacade devices) {
+    DeviceAuthFilter(DeviceFacade devices) {
         this.devices = devices;
     }
 
@@ -38,7 +37,7 @@ public class DeviceAuthFilter extends OncePerRequestFilter {
         String key = request.getHeader(HEADER);
         if (key != null && !key.isBlank()
                 && SecurityContextHolder.getContext().getAuthentication() == null) {
-            Optional<DeviceDtos.Authenticated> device = devices.authenticate(key);
+            Optional<AuthenticatedDevice> device = devices.authenticate(key);
             if (device.isPresent()) {
                 var authentication = UsernamePasswordAuthenticationToken.authenticated(
                         device.get(), null, List.of(new SimpleGrantedAuthority(ROLE)));

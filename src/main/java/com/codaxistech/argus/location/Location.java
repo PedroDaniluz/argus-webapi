@@ -7,8 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -22,9 +20,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "location")
 @Getter
-@Setter
-@NoArgsConstructor
-public class Location {
+class Location {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -57,4 +53,7 @@ public class Location {
     /** Distance from {@code ts} is how long the sample sat in a buffer. */
     @Column(name = "received_at", nullable = false)
     private Instant receivedAt = Instant.now();
+
+    protected Location() {
+    }
 }

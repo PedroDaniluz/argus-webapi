@@ -1,18 +1,18 @@
 package com.codaxistech.argus.user;
 
-import org.springframework.http.HttpStatus;
+import com.codaxistech.argus.common.AuthenticatedUser;
+import com.codaxistech.argus.common.DomainException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
-@Transactional(readOnly = true)
-public class UserService {
+@Transactional
+class UserService {
 
     private final UserRepository repository;
     private final PasswordEncoder passwordEncoder;
@@ -22,53 +22,42 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public List<UserDtos.Response> list() {
-        return repository.findAllByOrderByCreatedAtAsc().stream().map(UserService::toResponse).toList();
+    @Transactional(readOnly = true)
+    List<UserResponse> list() {
+        return repository.findAllByOrderByCreatedAtAsc().stream().map(UserResponse::from).toList();
     }
 
-    @Transactional
-    public UserDtos.Response create(UserDtos.CreateRequest request) {
-        if (repository.existsByEmailIgnoreCase(request.email())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "email already registered");
+    UserResponse create(CreateUserRequest request) {
+        String email = request.email().trim().toLowerCase();
+        if (repository.existsByEmailIgnoreCase(email)) {
+            throw DomainException.conflict("Email '%s' already registered".formatted(email));
         }
-        User user = new User();
-        user.setEmail(request.email().trim().toLowerCase());
-        user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setName(request.name().trim());
-        user.setRole(request.role());
-        return toResponse(repository.save(user));
+        return UserResponse.from(repository.save(new User(
+                email, passwordEncoder.encode(request.password()),
+                request.name().trim(), request.role())));
     }
 
     /** Checked here so the hash never leaves the package. */
-    public Optional<UserDtos.Account> authenticate(String email, String rawPassword) {
+    @Transactional(readOnly = true)
+    Optional<AuthenticatedUser> authenticate(String email, String rawPassword) {
         return repository.findByEmailIgnoreCase(email)
                 .filter(User::isActive)
-                .filter(u -> passwordEncoder.matches(rawPassword, u.getPasswordHash()))
-                .map(UserService::toAccount);
+                .filter(user -> passwordEncoder.matches(rawPassword, user.getPasswordHash()))
+                .map(UserService::toAuthenticated);
     }
 
-    public Optional<UserDtos.Account> activeAccount(UUID id) {
-        return repository.findById(id).filter(User::isActive).map(UserService::toAccount);
+    @Transactional(readOnly = true)
+    Optional<AuthenticatedUser> activeAccount(UUID id) {
+        return repository.findById(id).filter(User::isActive).map(UserService::toAuthenticated);
     }
 
-    public Optional<Integer> currentTokenVersion(UUID id) {
-        return repository.findById(id).filter(User::isActive).map(User::getTokenVersion);
-    }
-
-    @Transactional
-    public void bumpTokenVersion(UUID id) {
-        User user = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "user not found"));
-        user.setTokenVersion(user.getTokenVersion() + 1);
-    }
-
-    private static UserDtos.Response toResponse(User user) {
-        return new UserDtos.Response(user.getId(), user.getEmail(), user.getName(),
-                user.getRole(), user.getCreatedAt(), user.getDisabledAt());
-    }
-
-    private static UserDtos.Account toAccount(User user) {
-        return new UserDtos.Account(user.getId(), user.getEmail(), user.getName(),
+    private static AuthenticatedUser toAuthenticated(User user) {
+        return new AuthenticatedUser(user.getId(), user.getEmail(), user.getName(),
                 user.getRole(), user.getTokenVersion());
+    }
+
+    @Transactional(readOnly = true)
+    Optional<Integer> currentTokenVersion(UUID id) {
+        return repository.findById(id).filter(User::isActive).map(User::getTokenVersion);
     }
 }

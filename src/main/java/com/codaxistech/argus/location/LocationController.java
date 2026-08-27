@@ -17,7 +17,7 @@ import java.util.List;
 @RequestMapping("/api/locations")
 @Tag(name = "locations", description = "Position queries")
 @SecurityRequirement(name = "bearerAuth")
-public class LocationController {
+class LocationController {
 
     private final LocationService service;
 
@@ -28,7 +28,7 @@ public class LocationController {
     @GetMapping
     @Operation(operationId = "getLocationHistory", summary = "History for one device",
             description = "Newest first. To page, send the previous response's nextCursor back as to.")
-    public LocationDtos.Page history(
+    public LocationPage history(
             @Parameter(description = "device code", example = "trator-01")
             @RequestParam("device") String device,
             @Parameter(description = "inclusive lower bound, ISO-8601")
@@ -41,7 +41,7 @@ public class LocationController {
 
     @GetMapping("/latest")
     @Operation(operationId = "getLatestLocations", summary = "Last position of each device")
-    public List<LocationDtos.Response> latest() {
+    public List<LocationResponse> latest() {
         return service.latest();
     }
 }

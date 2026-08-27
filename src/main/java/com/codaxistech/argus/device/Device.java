@@ -7,8 +7,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -20,9 +18,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "device")
 @Getter
-@Setter
-@NoArgsConstructor
-public class Device {
+class Device {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -44,7 +40,22 @@ public class Device {
     @Column(name = "revoked_at")
     private Instant revokedAt;
 
-    public boolean isActive() {
+    protected Device() {
+    }
+
+    Device(String code, String label, String keyHash) {
+        this.code = code;
+        this.label = label;
+        this.keyHash = keyHash;
+    }
+
+    boolean isActive() {
         return revokedAt == null;
+    }
+
+    void revoke() {
+        if (isActive()) {
+            this.revokedAt = Instant.now();
+        }
     }
 }

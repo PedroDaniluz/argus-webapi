@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface LocationRepository extends JpaRepository<Location, Long> {
+interface LocationRepository extends JpaRepository<Location, Long> {
 
     Optional<Location> findFirstByDeviceIdOrderByTsDesc(UUID deviceId);
 
