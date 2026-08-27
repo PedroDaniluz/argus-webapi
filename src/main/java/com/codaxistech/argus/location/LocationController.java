@@ -26,7 +26,7 @@ public class LocationController {
     }
 
     @GetMapping
-    @Operation(summary = "History for one device",
+    @Operation(operationId = "getLocationHistory", summary = "History for one device",
             description = "Newest first. To page, send the previous response's nextCursor back as to.")
     public LocationDtos.Page history(
             @Parameter(description = "device code", example = "trator-01")
@@ -40,7 +40,7 @@ public class LocationController {
     }
 
     @GetMapping("/latest")
-    @Operation(summary = "Last position of each device")
+    @Operation(operationId = "getLatestLocations", summary = "Last position of each device")
     public List<LocationDtos.Response> latest() {
         return service.latest();
     }

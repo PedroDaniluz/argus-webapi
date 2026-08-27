@@ -1,5 +1,7 @@
 package com.codaxistech.argus.user;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.media.Schema.RequiredMode;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -13,6 +15,7 @@ public final class UserDtos {
     private UserDtos() {
     }
 
+    @Schema(name = "CreateUserRequest")
     public record CreateRequest(
             @NotBlank @Email String email,
             @NotBlank @Size(min = 8, max = 100) String password,
@@ -20,9 +23,14 @@ public final class UserDtos {
             @NotNull User.Role role
     ) {}
 
+    @Schema(name = "User")
     public record Response(
-            UUID id, String email, String name, User.Role role,
-            Instant createdAt, Instant disabledAt
+            @Schema(requiredMode = RequiredMode.REQUIRED) UUID id,
+            @Schema(requiredMode = RequiredMode.REQUIRED) String email,
+            @Schema(requiredMode = RequiredMode.REQUIRED) String name,
+            @Schema(requiredMode = RequiredMode.REQUIRED) User.Role role,
+            @Schema(requiredMode = RequiredMode.REQUIRED) Instant createdAt,
+            @Schema(requiredMode = RequiredMode.REQUIRED, nullable = true) Instant disabledAt
     ) {}
 
     /** What {@code auth} needs for its claims. No password hash leaves this package. */
