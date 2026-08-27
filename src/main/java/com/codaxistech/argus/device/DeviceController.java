@@ -20,7 +20,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/devices")
-@Tag(name = "devices", description = "Cadastro e chaves das placas embarcadas")
+@Tag(name = "devices", description = "Embedded board registry and keys")
 @SecurityRequirement(name = "bearerAuth")
 public class DeviceController {
 
@@ -33,13 +33,13 @@ public class DeviceController {
     }
 
     @GetMapping
-    @Operation(summary = "Lista os dispositivos")
+    @Operation(summary = "List devices")
     public List<DeviceDtos.Response> list() {
         return service.list();
     }
 
     @GetMapping("/{code}")
-    @Operation(summary = "Detalhe do dispositivo com a ultima posicao conhecida")
+    @Operation(summary = "Device detail with its last known position")
     public DeviceDtos.Detail detail(@PathVariable String code) {
         DeviceDtos.Response device = service.get(code);
         return new DeviceDtos.Detail(device,
@@ -48,9 +48,8 @@ public class DeviceController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Cadastra um dispositivo",
-            description = "A chave vem em claro nesta resposta e em nenhuma outra. "
-                    + "Guarde antes de fechar a aba.")
+    @Operation(summary = "Register a device",
+            description = "The key comes back in plaintext here and in no other response.")
     public ResponseEntity<DeviceDtos.Created> create(
             @Valid @RequestBody DeviceDtos.CreateRequest request) {
         DeviceDtos.Created created = service.create(request);
@@ -61,8 +60,8 @@ public class DeviceController {
 
     @DeleteMapping("/{code}/key")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Revoga a chave do dispositivo",
-            description = "Efeito imediato: o proximo POST de ingestao ja e recusado.")
+    @Operation(summary = "Revoke the device key",
+            description = "Takes effect immediately: the next ingest POST is refused.")
     public DeviceDtos.Response revokeKey(@PathVariable String code) {
         return service.revokeKey(code);
     }

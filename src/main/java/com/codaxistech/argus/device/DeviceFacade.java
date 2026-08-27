@@ -5,9 +5,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Unica porta de entrada de outros pacotes para o {@code device}.
- */
 @Component
 public class DeviceFacade {
 
@@ -21,7 +18,6 @@ public class DeviceFacade {
         return service.authenticate(presentedKey);
     }
 
-    /** @throws org.springframework.web.server.ResponseStatusException 404 se nao existir */
     public DeviceDtos.Response byCode(String code) {
         return service.get(code);
     }

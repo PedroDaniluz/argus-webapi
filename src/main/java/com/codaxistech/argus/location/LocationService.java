@@ -19,6 +19,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -29,16 +30,14 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class LocationService {
 
-    /** Teto de linhas por pagina de historico. Protege o painel de si mesmo. */
     static final int MAX_LIMIT = 1000;
     static final int DEFAULT_LIMIT = 500;
 
     private static final Logger log = LoggerFactory.getLogger(LocationService.class);
 
     /**
-     * A ingestao nao passa por JPA. Precisa de ON CONFLICT DO NOTHING, que e o que
-     * torna o replay de buffer idempotente, e o RETURNING diz exatamente quais
-     * linhas entraram — sem um SELECT extra so para descobrir o que era duplicata.
+     * Not JPA: ON CONFLICT DO NOTHING is what makes a buffer replay idempotent, and
+     * RETURNING names the rows that landed without a second SELECT.
      */
     private static final String INSERT = """
             INSERT INTO location (device_id, ts, lat, lon, speed_mps, course_deg, sats, hdop)
@@ -62,11 +61,7 @@ public class LocationService {
         this.events = events;
     }
 
-    /**
-     * Grava um lote. Amostra invalida e descartada, amostra repetida e ignorada
-     * pelo banco, e nenhuma das duas derruba o resto — depois de um replay de
-     * buffer, duplicata e amostra fora de ordem sao o caso normal, nao excecao.
-     */
+    /** After a buffer replay, duplicates and out-of-order samples are normal, not errors. */
     @Transactional
     public LocationDtos.IngestResponse ingest(UUID deviceId, String deviceCode,
                                               List<LocationDtos.Sample> samples) {
@@ -81,13 +76,12 @@ public class LocationService {
                 continue;
             }
             if (!seen.add(sample.ts())) {
-                continue;   // repetida dentro do proprio lote
+                continue;   // repeated inside this very batch
             }
             candidates.add(sample);
         }
         if (invalid > 0) {
-            log.warn("dispositivo {}: {} de {} amostras descartadas por invalidas",
-                    deviceCode, invalid, received);
+            log.warn("device {}: dropped {} of {} samples as invalid", deviceCode, invalid, received);
         }
         if (candidates.isEmpty()) {
             return new LocationDtos.IngestResponse(received, 0, received - invalid);
@@ -97,14 +91,13 @@ public class LocationService {
         if (!stored.isEmpty()) {
             events.publishEvent(new LocationDtos.Stored(stored));
         }
-        int duplicates = received - invalid - stored.size();
-        return new LocationDtos.IngestResponse(received, stored.size(), duplicates);
+        return new LocationDtos.IngestResponse(received, stored.size(),
+                received - invalid - stored.size());
     }
 
     private List<LocationDtos.Response> insert(UUID deviceId, String deviceCode,
                                                List<LocationDtos.Sample> samples) {
-        String values = String.join(", ", java.util.Collections.nCopies(samples.size(), ROW));
-        String sql = INSERT.formatted(values);
+        String sql = INSERT.formatted(String.join(", ", Collections.nCopies(samples.size(), ROW)));
         RowMapper<LocationDtos.Response> mapper = (rs, rowNum) -> toResponse(rs, deviceCode);
 
         return jdbc.query(connection -> {
@@ -122,38 +115,29 @@ public class LocationService {
                 setFloat(ps, i++, sample.hdop());
             }
             if (i - 1 != samples.size() * COLUMNS) {
-                throw new IllegalStateException("numero de parametros nao bate com o INSERT");
+                throw new IllegalStateException("parameter count does not match the INSERT");
             }
             return ps;
         }, mapper);
     }
 
-    /**
-     * Coordenada fora de faixa, epoch absurdo ou campo obrigatorio ausente sao
-     * defeito de leitura do GNSS, nao dado. Vale mais descartar do que gravar uma
-     * posicao que o painel vai desenhar no meio do oceano.
-     */
+    /** A bad GNSS read, not data: better dropped than drawn in the middle of the ocean. */
     private static boolean isValid(LocationDtos.Sample sample) {
         if (sample == null || sample.ts() == null || sample.lat() == null || sample.lon() == null) {
-            return false;
-        }
-        if (sample.lat() < -90 || sample.lat() > 90 || sample.lon() < -180 || sample.lon() > 180) {
             return false;
         }
         if (!Double.isFinite(sample.lat()) || !Double.isFinite(sample.lon())) {
             return false;
         }
-        // 2000-01-01 ate um dia no futuro: cobre relogio ainda sem fix e evita
-        // que uma amostra com epoch em milissegundos entre como ano 56000.
+        if (sample.lat() < -90 || sample.lat() > 90 || sample.lon() < -180 || sample.lon() > 180) {
+            return false;
+        }
+        // 2000-01-01 to one day ahead: catches a clock with no fix, and epochs sent in ms.
         long now = Instant.now().getEpochSecond();
         return sample.ts() >= 946_684_800L && sample.ts() <= now + 86_400L;
     }
 
-    /**
-     * Historico de um dispositivo, do mais recente para o mais antigo.
-     * {@code to} funciona como cursor: repasse o {@code nextCursor} da pagina
-     * anterior e a leitura continua de onde parou, sem OFFSET.
-     */
+    /** Newest first. {@code to} doubles as the cursor. */
     public LocationDtos.Page history(String deviceCode, Instant from, Instant to, Integer limit) {
         DeviceDtos.Response device = devices.byCode(deviceCode);
         int size = normalizeLimit(limit);
@@ -165,12 +149,11 @@ public class LocationService {
                 .map(location -> toResponse(location, device.code()))
                 .toList();
 
-        // So oferece proxima pagina quando encheu: pagina curta ja e o fim.
         Instant next = items.size() < size ? null : items.getLast().ts();
         return new LocationDtos.Page(items, next);
     }
 
-    /** Ultima posicao conhecida de cada dispositivo. Quem nunca reportou fica de fora. */
+    /** Devices that never reported are left out. */
     public List<LocationDtos.Response> latest() {
         return devices.all().stream()
                 .map(device -> lastFor(device.id(), device.code()))
@@ -184,10 +167,7 @@ public class LocationService {
     }
 
     private static int normalizeLimit(Integer limit) {
-        if (limit == null || limit <= 0) {
-            return DEFAULT_LIMIT;
-        }
-        return Math.min(limit, MAX_LIMIT);
+        return limit == null || limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
     }
 
     private static LocationDtos.Response toResponse(Location location, String deviceCode) {

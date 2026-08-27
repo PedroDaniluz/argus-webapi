@@ -25,10 +25,7 @@ public final class UserDtos {
             Instant createdAt, Instant disabledAt
     ) {}
 
-    /**
-     * Recorte que o {@code auth} precisa para montar as claims. Nao carrega o
-     * hash da senha: a conferencia acontece dentro deste pacote.
-     */
+    /** What {@code auth} needs for its claims. No password hash leaves this package. */
     public record Account(
             UUID id, String email, String name, User.Role role, int tokenVersion
     ) {}

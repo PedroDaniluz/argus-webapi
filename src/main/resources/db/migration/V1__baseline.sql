@@ -29,8 +29,11 @@ CREATE TABLE location (
     sats         SMALLINT,
     hdop         REAL,
     received_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Makes ingest idempotent: after a buffer replay, a duplicate sample is normal.
     CONSTRAINT uq_location UNIQUE (device_id, ts)
 );
 
+-- BRIN on ts: append-only data arrives in time order, and BRIN stays far smaller
+-- and faster than a B-tree for range scans.
 CREATE INDEX ix_location_ts      ON location USING BRIN (ts);
 CREATE INDEX ix_location_dev_ts  ON location (device_id, ts DESC);

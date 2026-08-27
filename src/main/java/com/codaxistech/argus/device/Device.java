@@ -14,9 +14,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Placa embarcada. Nunca fala com o Postgres direto: credencial de banco em
- * firmware daria escrita a quem tivesse a placa na mao, e sem revogacao
- * individual. Por isso a placa faz POST na API com uma chave propria.
+ * An embedded board. It POSTs to the API rather than to Postgres: database
+ * credentials in firmware would hand write access to anyone holding a board.
  */
 @Entity
 @Table(name = "device")
@@ -29,14 +28,13 @@ public class Device {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    /** Identificador humano, tipo 'trator-01'. */
     @Column(nullable = false, unique = true)
     private String code;
 
     @Column(nullable = false)
     private String label;
 
-    /** BCrypt do segredo. A chave em claro so existe na resposta da criacao. */
+    /** BCrypt of the secret. Plaintext exists only in the creation response. */
     @Column(name = "key_hash", nullable = false)
     private String keyHash;
 

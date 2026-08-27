@@ -1,9 +1,8 @@
 spring:
   application:
     name: argus-webapi
-  # O .env e lido pelo Spring como properties, a partir do diretorio de trabalho.
-  # Nao confundir com o env_file: do Docker, que injeta variavel de ambiente:
-  # aqui o arquivo precisa existir no disco.
+  # Read as properties from the working directory. Not Docker's env_file:, which
+  # injects env vars; this one needs the file on disk.
   config:
     import: optional:file:.env[.properties]
   datasource:
@@ -14,16 +13,20 @@ spring:
       maximum-pool-size: 10
   jpa:
     hibernate:
-      # Derruba a subida se entidade e schema divergirem. Schema so muda por migration.
       ddl-auto: validate
     open-in-view: false
+  # Keeps framework messages (Bean Validation above all) in English regardless of
+  # the host locale, instead of following Accept-Language.
+  web:
+    locale: en
+    locale-resolver: fixed
   flyway:
     enabled: true
-    # Sem default de proposito: placeholder vazio derruba a subida. Um hash
-    # padrao versionado seria senha publica na VM.
+    # Brackets keep the keys literal. Without them Boot's binder normalises them to
+    # kebab-case and they stop matching ${admin_email} in the migration.
     placeholders:
-      admin-email: ${ADMIN_EMAIL}
-      admin-password-hash: ${ADMIN_PASSWORD_HASH}
+      "[admin_email]": ${ADMIN_EMAIL}
+      "[admin_password_hash]": ${ADMIN_PASSWORD_HASH}
 
 server:
   port: ${SERVER_PORT:8080}

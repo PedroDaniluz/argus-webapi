@@ -7,10 +7,6 @@ import io.swagger.v3.oas.models.security.SecurityScheme;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Documentacao: o springdoc gera o contrato em /v3/api-docs e serve o Swagger UI
- * em /swagger-ui.html.
- */
 @Configuration
 public class OpenApiConfig {
 
@@ -24,22 +20,22 @@ public class OpenApiConfig {
                         .title("Argus WebAPI")
                         .version("v1")
                         .description("""
-                                Recebe posicoes dos dispositivos embarcados, persiste e serve \
-                                para o painel web.
+                                Receives positions from embedded devices, stores them and serves \
+                                the web dashboard.
 
-                                Dois esquemas de autenticacao: usuarios usam JWT Bearer, \
-                                dispositivos usam o header X-Device-Key em /api/ingest/**."""))
+                                Two authentication schemes: users carry a JWT bearer token, devices \
+                                send the X-Device-Key header on /api/ingest/**."""))
                 .components(new Components()
                         .addSecuritySchemes(BEARER_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")
-                                .description("Access token devolvido por POST /auth/login."))
+                                .description("Access token returned by POST /auth/login."))
                         .addSecuritySchemes(DEVICE_KEY_SCHEME, new SecurityScheme()
                                 .type(SecurityScheme.Type.APIKEY)
                                 .in(SecurityScheme.In.HEADER)
                                 .name(DeviceAuthFilter.HEADER)
-                                .description("Chave opaca do dispositivo, no formato "
-                                        + "<code>.<secret>, exibida uma unica vez na criacao.")));
+                                .description("Opaque device key, shaped as <code>.<secret>, "
+                                        + "shown only once when the device is created.")));
     }
 }

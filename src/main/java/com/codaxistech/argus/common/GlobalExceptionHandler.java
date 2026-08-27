@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getGlobalErrors()
                 .forEach(ge -> fields.putIfAbsent(ge.getObjectName(), ge.getDefaultMessage()));
         return ResponseEntity.badRequest().body(ApiError.of(
-                400, "Bad Request", "payload invalido", req.getRequestURI(), fields));
+                400, "Bad Request", "invalid payload", req.getRequestURI(), fields));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
         ex.getConstraintViolations()
                 .forEach(v -> fields.putIfAbsent(v.getPropertyPath().toString(), v.getMessage()));
         return ResponseEntity.badRequest().body(ApiError.of(
-                400, "Bad Request", "parametros invalidos", req.getRequestURI(), fields));
+                400, "Bad Request", "invalid parameters", req.getRequestURI(), fields));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
@@ -54,43 +54,38 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ApiError> onUnauthenticated(AuthenticationException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiError.of(
-                401, "Unauthorized", "credencial ausente ou invalida", req.getRequestURI()));
+                401, "Unauthorized", "missing or invalid credentials", req.getRequestURI()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiError> onDenied(AccessDeniedException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.of(
-                403, "Forbidden", "sem permissao para este recurso", req.getRequestURI()));
+                403, "Forbidden", "not allowed on this resource", req.getRequestURI()));
     }
 
     @ExceptionHandler(TypeMismatchException.class)
     ResponseEntity<ApiError> onTypeMismatch(TypeMismatchException ex, HttpServletRequest req) {
         return ResponseEntity.badRequest().body(ApiError.of(
-                400, "Bad Request",
-                "valor invalido para o parametro: " + ex.getValue(), req.getRequestURI()));
+                400, "Bad Request", "invalid parameter value: " + ex.getValue(), req.getRequestURI()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiError> onConflict(DataIntegrityViolationException ex, HttpServletRequest req) {
-        log.warn("violacao de integridade em {}", req.getRequestURI(), ex);
+        log.warn("integrity violation on {}", req.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(
-                409, "Conflict", "recurso ja existe ou viola uma restricao", req.getRequestURI()));
+                409, "Conflict", "resource already exists or violates a constraint", req.getRequestURI()));
     }
 
-    /**
-     * Rota inexistente, metodo errado, corpo ilegivel e parecidos ja chegam com o
-     * status certo por {@link ErrorResponse}. Sem este desvio eles cairiam no 500
-     * generico abaixo, e um 404 apareceria como falha do servidor.
-     */
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> onUnexpected(Exception ex, HttpServletRequest req) {
+        // Unknown route, wrong method, unreadable body: these already carry a status.
         if (ex instanceof ErrorResponse response) {
             HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
             return ResponseEntity.status(status).body(ApiError.of(
                     status.value(), status.getReasonPhrase(), ex.getMessage(), req.getRequestURI()));
         }
-        log.error("erro nao tratado em {}", req.getRequestURI(), ex);
+        log.error("unhandled error on {}", req.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiError.of(
-                500, "Internal Server Error", "erro interno", req.getRequestURI()));
+                500, "Internal Server Error", "internal error", req.getRequestURI()));
     }
 }

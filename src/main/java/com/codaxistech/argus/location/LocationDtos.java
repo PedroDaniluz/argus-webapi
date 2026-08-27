@@ -16,17 +16,14 @@ public final class LocationDtos {
 
     public record IngestRequest(
             @NotBlank String deviceCode,
-            /*
-             * Sem @Valid na lista de proposito: amostra ruim nao pode derrubar o
-             * lote inteiro. A validacao de cada amostra acontece no service, que
-             * descarta e conta. O @Size vale para o lote e derruba mesmo — 50 e o
-             * teto do transporte LoRa da fase seguinte, imposto desde ja.
-             */
+            // No @Valid on purpose: one bad sample must not sink the batch, so samples
+            // are checked in the service. @Size does reject the batch: 50 is the ceiling
+            // of the LoRa transport coming next, enforced from day one.
             @NotEmpty @Size(max = 50) List<Sample> samples
     ) {}
 
     public record Sample(
-            @Schema(description = "epoch em segundos, UTC, vindo do GNSS", example = "1735000000")
+            @Schema(description = "epoch seconds, UTC, straight from the GNSS", example = "1735000000")
             @NotNull Long ts,
             @NotNull Double lat,
             @NotNull Double lon,
@@ -36,11 +33,7 @@ public final class LocationDtos {
             Float hdop
     ) {}
 
-    /**
-     * {@code received} conta o que chegou, {@code stored} o que virou linha e
-     * {@code duplicates} o que ja existia. A soma pode ficar abaixo de
-     * {@code received}: a diferenca sao amostras descartadas por invalidas.
-     */
+    /** {@code stored} plus {@code duplicates} falls short of {@code received} when samples were invalid. */
     public record IngestResponse(int received, int stored, int duplicates) {}
 
     public record Response(
@@ -50,12 +43,8 @@ public final class LocationDtos {
             Instant receivedAt
     ) {}
 
-    /**
-     * {@code nextCursor} e o {@code ts} da ultima linha devolvida: mande de volta
-     * como {@code to} para pegar a pagina seguinte. Nulo quando acabou.
-     */
+    /** Send {@code nextCursor} back as {@code to} for the next page. Null at the end. */
     public record Page(List<Response> items, Instant nextCursor) {}
 
-    /** Publicado depois de gravar, para o SSE empurrar sem consultar o banco. */
     public record Stored(List<Response> locations) {}
 }
